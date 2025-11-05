@@ -1,0 +1,387 @@
+import uuid
+
+def generate_random_id():
+    # Gera um UUID4 (aleatório)
+    random_uuid = uuid.uuid4()
+    # Converte o UUID para bytes e usa os primeiros 12 bytes
+    return random_uuid.bytes[:12]
+
+class Banco:
+    def __init__(self, db):
+            self.collection = db['movies']  # Coleção de filmes no MongoDB
+
+    def create(self, filme):
+        print("Criando o Filme:", filme.titulo)
+        
+        # Verifica se todos os campos necessários estão presentes
+        if not filme.titulo:
+            print("Erro: Título do filme não fornecido.")
+            return False, None
+        if not filme.diretores:
+            print("Erro: Lista de diretores não fornecida.")
+            return False, None
+        if filme.ano <= 0:
+            print("Erro: Ano de lançamento inválido.")
+            return False, None
+        if not filme.atores:
+            print("Erro: Lista de atores não fornecida.")
+            return False, None
+        if not filme.generos:
+            print("Erro: Lista de gêneros não fornecida.")
+            return False, None
+        if filme.duracao <= 0:
+            print("Erro: Duração do filme inválida.")
+            return False, None
+
+        # Cria o documento do filme para inserção, sem o campo '_id' para que seja gerado automaticamente
+        filme_documento = {
+            "title": filme.titulo,
+            "directors": list(filme.diretores),  # Converter para lista, caso seja necessário
+            "year": filme.ano,
+            "cast": list(filme.atores),  # Converter para lista
+            "genres": list(filme.generos),  # Converter para lista
+            "runtime": filme.duracao
+        }
+
+        # Insere o filme na coleção
+        try:
+            result = self.collection.insert_one(filme_documento)  # O MongoDB gera o ID automaticamente
+            print("Filme criado com sucesso!")
+            # Cria uma nova instância de filme com o ID gerado pelo MongoDB
+            filme_criado = {
+                "id": result.inserted_id,  # Pega o ObjectId gerado e converte para string
+                "titulo": filme.titulo,
+                "diretores": filme.diretores,
+                "ano": filme.ano,
+                "atores": filme.atores,
+                "generos": filme.generos,
+                "duracao": filme.duracao
+            }
+            return True, filme_criado
+        
+        except Exception as e:
+            print(f"Erro ao criar filme: {e}")
+            return False, None        
+        
+    def read(self, filme):
+        print("Lendo o filme com ID:", filme.id)
+>>>>>>> e2db374 (Commit 2:41 Domingo)
+
+        try:
+            # Converte o ID para ObjectId
+            object_id = ObjectId(filme.id)
+            print(f"Convertido para ObjectId: {object_id}")
+            
+            # Busca o filme no MongoDB pelo ID
+            mongo_filme = self.collection.find_one({"_id": object_id})
+            
+            if mongo_filme is None:
+                print("Filme não encontrado")
+                return None
+            else:
+                # Cria um novo objeto Filme do Protocol Buffer
+                filme_lido = mflix_pb2.Filme()
+
+                # Popula o objeto com os dados retornados do MongoDB
+                filme_lido.id = str(mongo_filme["_id"])  # O ID no MongoDB é um ObjectId
+                filme_lido.titulo = mongo_filme.get("title", "")
+                filme_lido.diretores.extend(mongo_filme.get("directors", []))
+                filme_lido.ano = mongo_filme.get("year", 0)
+                filme_lido.atores.extend(mongo_filme.get("cast", []))
+                filme_lido.generos.extend(mongo_filme.get("genres", []))
+                filme_lido.duracao = mongo_filme.get("runtime", 0)
+
+                return filme_lido
+        except Exception as e:
+            print(f"Erro ao ler filme: {e}")
+            return None
+        
+    def update(self, filme):
+        print("Atualizando o filme com ID:", filme.id, "Para", filme.titulo)
+        
+        if not filme.titulo:
+            print("Título não fornecido")
+            return False
+
+        # Converte o ID para ObjectId se necessário
+        try:
+            object_id = ObjectId(filme.id)
+        except Exception as e:
+            print(f"Erro ao converter ID para ObjectId: {e}")
+            return False
+
+        # Prepara o documento para atualização
+        update_doc = {
+            "title": filme.titulo,
+            "directors": list(filme.diretores),  # Converte para lista padrão
+            "year": filme.ano,
+            "cast": list(filme.atores),           # Converte para lista padrão
+            "genres": list(filme.generos),       # Converte para lista padrão
+            "runtime": filme.duracao
+        }
+
+        # Atualiza o filme na coleção
+        result = self.collection.update_one({"_id": object_id}, {"$set": update_doc})
+        
+        if result.modified_count > 0:
+            print("Filme atualizado com sucesso!")
+            return True
+        else:
+            print("Erro ao atualizar o filme")
+            return False                
+        
+    def delete(self, filme):
+        try:
+            # Converte o ID para ObjectId
+            object_id = ObjectId(filme.id)
+            
+            # Remove o filme da coleção pelo ID
+            result = self.collection.delete_one({"_id": object_id})
+            
+            if result.deleted_count > 0:
+                print("Filme deletado com sucesso!")
+                return True
+            else:
+                print("Filme não encontrado.")
+                return False
+                
+        except Exception as e:
+            print(f"Erro ao deletar filme: {e}")
+            return False
+    
+    def read_by_actors(self, filme):
+        print("Lendo o filme com atores:", filme.atores)
+
+        try:
+            # Converte a lista de atores em uma lista de strings para uso na consulta
+            atores = list(filme.atores)
+
+            # Busca filmes no MongoDB pelos atores
+            mongo_filmes = self.collection.find({"cast": {"$in": atores}})
+            
+            filmes_lidos = []
+            for mongo_filme in mongo_filmes:
+                # Cria um novo objeto Filme do Protocol Buffer
+                filme_lido = mflix_pb2.Filme()
+                
+                # Popula o objeto com os dados retornados do MongoDB
+                filme_lido.id = str(mongo_filme["_id"])  # O ID no MongoDB é um ObjectId
+                filme_lido.titulo = mongo_filme.get("title", "")
+                filme_lido.diretores.extend(mongo_filme.get("directors", []))
+                filme_lido.ano = mongo_filme.get("year", 0)
+                filme_lido.atores.extend(mongo_filme.get("cast", []))
+                filme_lido.generos.extend(mongo_filme.get("genres", []))
+                filme_lido.duracao = mongo_filme.get("runtime", 0)
+                
+                filmes_lidos.append(filme_lido)
+            
+            if not filmes_lidos:
+                print("Nenhum filme encontrado")
+                return None
+            
+            # Cria uma mensagem de resposta com a lista de filmes
+            resposta = mflix_pb2.Filme()
+            resposta.filmes.extend(filmes_lidos)
+            return resposta
+        except Exception as e:
+            print(f"Erro ao ler filmes: {e}")
+            return None
+                    
+def envia_filme(s ,filme):
+    msg = filme.SerializeToString()
+    tamanho_mensagem = len(msg).to_bytes(4, 'big')
+    s.send(tamanho_mensagem)
+#    print("\nEnviado tamanho_mensagem", tamanho_mensagem)
+    s.send(msg)
+    print("\nEnviado msg", msg)
+
+def envia_confirmacao(s, confirmacao):
+    msg = confirmacao.SerializeToString()
+    tamanho_mensagem = len(msg).to_bytes(4, 'big')
+    s.send(tamanho_mensagem)
+#    print("\nEnviado tamanho_mensagem", tamanho_mensagem)
+    s.send(msg)
+    print("\nEnviado msg de tamanho", len(msg))
+
+
+def receber_pedido(s):
+    tamanho_mensagem_bytes = s.recv(4)
+#    print("\nRecebido tamanho_mensagem", tamanho_mensagem_bytes)
+    tamanho_mensagem = (tamanho_mensagem_bytes[0] << 24) + (tamanho_mensagem_bytes[1] << 16) + (tamanho_mensagem_bytes[2] << 8) + tamanho_mensagem_bytes[3]
+    pedido = mflix_pb2.Pedido()
+    pedido_empacotado = s.recv(tamanho_mensagem)
+    print("\nRecebido msg de tamanho", tamanho_mensagem)
+    pedido.ParseFromString(pedido_empacotado)
+    return pedido
+
+
+def handle_client(conn, addr):
+    print(f"Conexão com {addr} estabelecida.")
+    connection = 1
+    while connection:
+        
+        pedido = receber_pedido(conn)
+        
+        confirmacao = mflix_pb2.Confirmacao()
+        
+        if pedido.op == 1:  # CREATE
+            if not pedido.filme.titulo:
+                confirmacao.erro = 2  # Campo Título vazio
+                confirmacao.resultado = 0
+            elif not pedido.filme.diretores:
+                confirmacao.erro = 3  # Campo Diretor vazio
+                confirmacao.resultado = 0
+            elif not pedido.filme.ano:
+                confirmacao.erro = 4  # Campo Ano vazio
+                confirmacao.resultado = 0
+            elif not pedido.filme.generos:
+                confirmacao.erro = 5  # Campo Gêneros vazio
+                confirmacao.resultado = 0
+            elif not pedido.filme.atores:
+                confirmacao.erro = 6  # Campo Atores vazio
+                confirmacao.resultado = 0
+            elif not pedido.filme.duracao:
+                confirmacao.erro = 7  # Campo Duração vazio
+                confirmacao.resultado = 0
+            else:
+                resultado = banco_de_dados.create(pedido.filme)
+                if resultado[0]:  # Se a criação foi bem-sucedida
+                    confirmacao.resultado = 1
+                    confirmacao.filme.id = str(resultado[1]['id'])
+                    confirmacao.filme.titulo = resultado[1]['titulo']
+                    confirmacao.filme.diretores.extend(resultado[1]['diretores'])
+                    confirmacao.filme.ano = resultado[1]['ano']
+                    confirmacao.filme.atores.extend(resultado[1]['atores'])
+                    confirmacao.filme.generos.extend(resultado[1]['generos'])
+                    confirmacao.filme.duracao = resultado[1]['duracao']
+                else:
+                    confirmacao.resultado = 0
+                    confirmacao.erro = 8  # Erro ao criar o filme
+            
+
+        elif pedido.op == 2:  # READ
+
+            if not pedido.filme.id:
+                confirmacao.erro = 1  # Campo ID vazio
+                confirmacao.resultado = 0
+            else:
+                filme_lido = banco_de_dados.read(pedido.filme)
+                if filme_lido is None:
+                    confirmacao.resultado = 0
+                    confirmacao.erro = 9  # Erro ao ler o filme 
+                else:   
+                    confirmacao.filme.CopyFrom(filme_lido)
+                    confirmacao.resultado = 2
+
+    
+        elif pedido.op == 3:  # UPDATE
+            if not pedido.filme.id:
+                confirmacao.erro = 1  # Campo ID vazio
+                confirmacao.resultado = 0
+            elif not pedido.filme.titulo:
+                confirmacao.erro = 2  # Campo Título vazio
+                confirmacao.resultado = 0
+            elif not pedido.filme.diretores or any(diretor == "" for diretor in pedido.filme.diretores):
+                confirmacao.erro = 3  # Campo Diretor vazio
+                confirmacao.resultado = 0
+            elif not pedido.filme.ano:
+                confirmacao.erro = 4  # Campo Ano vazio
+                confirmacao.resultado = 0
+            elif not pedido.filme.generos or any(genero == "" for genero in pedido.filme.generos):
+                confirmacao.erro = 5  # Campo Gêneros vazio
+                confirmacao.resultado = 0
+            elif not pedido.filme.atores or any(ator == "" for ator in pedido.filme.atores):
+                confirmacao.erro = 6  # Campo Atores vazio
+                confirmacao.resultado = 0
+            elif not pedido.filme.duracao:
+                confirmacao.erro = 7  # Campo Duração vazio
+                confirmacao.resultado = 0
+            elif any(diretor == "" for diretor in pedido.filme.diretores):
+                confirmacao.erro = 12  # Campo Diretor vazio
+                confirmacao.resultado = 0
+            elif any(genero == "" for genero in pedido.filme.generos):
+                confirmacao.erro = 13  # Campo Gêneros vazio
+                confirmacao.resultado = 0
+            elif any(ator == "" for ator in pedido.filme.atores):
+                confirmacao.erro = 14  # Campo Atores vazio
+                confirmacao.resultado = 0
+            else:
+                resultado = banco_de_dados.update(pedido.filme)
+                if resultado == False:
+                    confirmacao.resultado = 0
+                    confirmacao.erro = 10  # Erro ao atualizar o filme
+                else:
+                    confirmacao.resultado = 3
+            
+
+        elif pedido.op == 4:  # DELETE
+
+            if not pedido.filme.id:
+                confirmacao.erro = 1  # Campo ID vazio
+                confirmacao.resultado = 0
+            else:
+                resultado = banco_de_dados.delete(pedido.filme)
+                if resultado == False:
+                    confirmacao.resultado = 0
+                    confirmacao.erro = 11  # Erro ao deletar o filme
+                else:
+                    confirmacao.filme.CopyFrom(pedido.filme)
+                    confirmacao.resultado = 4
+
+  
+        elif pedido.op == 5: #DISCONNECT
+            confirmacao.resultado = 5
+            connection = 0
+            print(f"Conexão com {addr} encerrada.")
+        
+        elif pedido.op == 6: # Read por atores
+            if not pedido.filme.atores:
+                confirmacao.erro = 1  # Campo Atores vazio
+                confirmacao.resultado = 0
+            else:
+                filme_lido = banco_de_dados.read_by_actors(pedido.filme)
+                if filme_lido is None:
+                    confirmacao.resultado = 0
+                    confirmacao.erro = 9  # Erro ao ler o filme 
+                else:   
+                    confirmacao.filme.CopyFrom(filme_lido)
+                    confirmacao.resultado = 2            
+
+
+
+        envia_confirmacao(conn, confirmacao)
+
+
+
+
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+    # Cria a conexão com o MongoDB
+    uri = "mongodb+srv://admin:admin@mflix-db.e3wrt.mongodb.net/?retryWrites=true&w=majority&appName=mflix-db"
+    client = MongoClient(uri, server_api=ServerApi('1'))
+
+    # Verifica se a conexão foi estabelecida
+    try:
+        client.admin.command('ping')
+        print("Conexão com o servidor Mongo Estabelecida!")
+    except Exception as e:
+        print(e)
+
+    # Acessa o banco de dados e a coleção
+    db = client['sample_mflix']  # Nome do banco de dados
+
+    # Inicializa o objeto banco_de_dados com a conexão MongoDB
+    banco_de_dados = Banco(db)
+
+    # Inicia o servidor TCP
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind((HOST, PORT))
+        server.listen()
+        print(f"Servidor ouvindo em {HOST}:{PORT}")
+
+        while True:
+            conn, addr = server.accept()
+            thread = threading.Thread(target=handle_client, args=(conn, addr))
+            thread.start()
+
